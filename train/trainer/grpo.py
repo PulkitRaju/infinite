@@ -16,7 +16,7 @@ from train.utils.algorithms import (
 from train.utils.comm import initialize_global_process_group
 from train.utils.checkpointing import load_ckpt, save_ckpt, save_model
 from train.utils.logging import time_logger
-
+# from train.utils.scheduler import BitterScheduler
 
 class GRPOTrainer(Trainer):
     """
@@ -45,6 +45,8 @@ class GRPOTrainer(Trainer):
             self.critic = Critic(config.critic)
             self.critic.scheduler = self.prepare_scheduler(self.critic)
         self.rollout = Rollout(config.rollout)
+        # if self.config.trainer.prioritized_replay:
+        #     self.scheduler = BitterScheduler(config.scheduler.domain_ids, config.scheduler.beta, config.scheduler.tau, config.scheduler.eps, config.scheduler.init_acc_ema)
 
     def get_dataloader(self, train: bool):
         """

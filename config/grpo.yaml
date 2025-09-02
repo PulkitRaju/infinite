@@ -105,3 +105,12 @@ trainer:
   save_dir: ckpts/${trainer.experiment_name}
   save_freq: null
   use_wandb: true
+  prioritized_replay: false
+
+
+scheduler:
+  beta: 0.05
+  tau: 3.0
+  eps: 1e-3
+  init_acc_ema: 0.5
+  domain_ids: []
