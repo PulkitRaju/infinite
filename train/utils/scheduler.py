@@ -1,5 +1,15 @@
 import numpy as np
 
+
+def softmax(x):
+ return np.exp(x) - np.max(x) / np.sum(np.exp(x) - np.max(x))
+
+
+def add_eps_floor(x,eps):
+    """add eps floor to probs and then normalize"""
+    x = np.maximum(x, eps)
+    return x / np.sum(x)
+
 class TriageState:
     def __init__(self, domain_ids, beta, init_acc_ema):
         # self.acc_ema: dict[domain_id, float]
@@ -10,7 +20,7 @@ class TriageState:
             raise ValueError("beta must be in (0, 1].")
         if not (0.0 <= float(init_acc_ema) <= 1.0):
             raise ValueError("init_acc_ema must be in [0, 1].")
-        domain_ids = list(dict.fromkeys(str(d).strip() for d in (domain_ids or [])))
+        self.domain_ids = list(dict.fromkeys(str(d).strip() for d in (domain_ids or [])))
         self.init_acc_ema = float(init_acc_ema)
         self.acc_ema = {domain_id: init_acc_ema for domain_id in domain_ids}
        
@@ -27,7 +37,7 @@ class TriageState:
         
     def state_dict(self,version=1) -> dict:
         return {
-        "acc_ema": dict(self.acc_ema),  # shallow copy is fine here
+        "acc_ema": dict(self.acc_ema),  
         "beta": float(self.beta),
         "init_acc_ema": float(self.init_acc_ema), 
         "version": version
@@ -44,16 +54,24 @@ class TriageState:
 class BitterScheduler:
     def __init__(self, domain_ids, beta=0.05, tau=3.0, eps=1e-3, init_acc_ema=0.5, seed=0):
         # self.tau, self.eps; self.rng; self.state = TriageState(...)
-        self.tau = tau
-        self.eps = eps
+        self.tau = float(tau)
+        self.eps = float(eps)
+        self.seed = seed
         self.rng = np.random.default_rng(seed)
         self.state = TriageState(domain_ids, beta, init_acc_ema)
-
+        self.probs = {}
     def get_domain_probs(self) -> dict[str, float]:
         # logits_i = tau * (1 - acc_ema_i)
         # probs = softmax(logits)
         # p_i = max(probs_i, eps); renormalize to sum=1
-        raise NotImplementedError("Not implemented.")
+        
+        logits_per_domain = [self.tau * (1 - self.state.acc_ema[domain_id]) for domain_id in self.state.acc_ema.keys()]
+        probs_per_domain = softmax(logits_per_domain)
+        probs_per_domain = add_eps_floor(probs_per_domain, self.eps)
+        self.probs = {domain_id: float(p) for domain_id, p in zip(self.state.acc_ema.keys(), probs_per_domain)}
+        return self.probs
+        
+
     def sample_domains(self, k: int) -> list[str]:
         # draw k domain_ids using multinomial on probs
         raise NotImplementedError("Not implemented.")
@@ -62,6 +80,27 @@ class BitterScheduler:
         self.state.update_acc(domain_id, passed_bool)
 
     def state_dict(self) -> dict:
-        return self.state.state_dict()
+        return {
+            "triage": self.state.state_dict(),
+            "tau": float(self.tau),
+            "eps": float(self.eps),
+            "seed": self.seed,
+            "rng_state": self.rng.bit_generator.state,
+            "version": 1
+        }
     def load_state_dict(self, sd: dict):
-        self.state.load_state_dict(sd)
+        # accept either full scheduler dict or triage-only dict 
+        if "triage" in sd:
+            self.state.load_state_dict(sd["triage"]) 
+            if "tau" in sd:
+                self.tau = float(sd["tau"])
+            if "eps" in sd:
+                self.eps = float(sd["eps"])
+            if "seed" in sd:
+                self.seed = sd["seed"]
+            if "rng_state" in sd:
+                self.rng = np.random.default_rng()
+                self.rng.bit_generator.state = sd["rng_state"]
+        else:
+            # older format: sd is actually the triage state only
+            self.state.load_state_dict(sd)
