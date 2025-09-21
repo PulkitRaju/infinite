@@ -11,3 +11,4 @@ sglang[all]==0.4.6.post5
 wandb
 flash-attn==2.7.4.post1
 torchdata
+verifiers

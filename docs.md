@@ -242,10 +242,21 @@ data.prompts_per_rollout=4 data.responses_per_prompt=2
 ---
 
 ## Adapting External Reward Logic (e.g., Verifiers)
-- Lift the reward logic you like (e.g., box‑answer parsing or rubric checks) into a single function inside a new env module.
+- Lift the reward logic you like (e.g., box-answer parsing or rubric checks) into a single function inside a new env module.
 - Keep our dataset format unchanged; only your `reward_fn` needs to normalize the final assistant message the same way.
-- If their logic expects “tools” or additional context, implement that in `interact` and/or pre/post‑processing helpers inside the module.
-- Start with a single‑turn env (like the skeleton above), then expand to tools/multi‑turn if needed.
+- If their logic expects “tools” or additional context, implement that in `interact` and/or pre/post-processing helpers inside the module.
+- Start with a single-turn env (like the skeleton above), then expand to tools/multi-turn if needed.
+
+### Verifiers Adapter (Bring Your Own Env)
+- Path: `environments/verifiers_adapter.py`.
+- Configure which Verifiers package to load with env vars:
+  - `VERIFIERS_ENV_ID` (defaults to `math_python`).
+  - `VERIFIERS_ENV_ARGS` (JSON dict forwarded to `vf.load_environment`).
+- Install dependencies: add `verifiers` to your env (`pip install -r requirements.txt`).
+- Hydra: set `rollout.env_path=environments/verifiers_adapter.py`; mirror the Verifiers env’s turn budget with `rollout.max_turns`.
+- Dataset: continue supplying `messages`/`answer`; optional `info`/`task` can be plumbed by extending the dataloader.
+- Runtime: the adapter keeps per-conversation state, calls Verifiers’ rubric for reward, and forwards tool traffic returned by the env. No changes to `train/workers/rollout.py` are required.
+- Smoke test: `python -m train.trainer.grpo --config-name grpo rollout.env_path=environments/verifiers_adapter.py rollout.max_turns=<vf_max_turns>` using the stub dataset before scaling up.
 
 ---
 

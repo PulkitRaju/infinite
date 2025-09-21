@@ -54,8 +54,8 @@ rollout:
   test_sampling_params:
     temperature: 0.0
     max_new_tokens: ${rollout.train_sampling_params.max_new_tokens}
-  max_turns: 1
-  env_path: null
+  max_turns: 3
+  env_path: environments/verifiers_adapter.py
   dynamic_filtering: true
 
 ref_actor:

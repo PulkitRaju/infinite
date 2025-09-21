@@ -13,6 +13,10 @@ if [ -f "environments/.env" ]; then
     source environments/.env
 fi
 
+# Default Verifiers configuration (can be overridden before invoking this script)
+export VERIFIERS_ENV_ID="${VERIFIERS_ENV_ID:-math_python}"
+# Optional: VERIFIERS_ENV_ARGS can be a JSON object (e.g. '{"max_turns": 4}')
+
 # Check for HF token
 if [ -z "$HF_TOKEN" ] && [ -z "$HUGGING_FACE_HUB_TOKEN" ]; then
     echo "WARNING: No Hugging Face token found!"
@@ -65,7 +69,8 @@ torchrun \
     actor.model_name=Qwen/Qwen2-1.5B-Instruct \
     actor.max_length_per_device=512 \
     rollout.train_sampling_params.max_new_tokens=128 \
-    rollout.env_path=environments/eq.py \
+    rollout.env_path=environments/verifiers_adapter.py \
+    rollout.max_turns=3 \
     adv.estimator=reinforce \
     adv.norm_var=true \
     trainer.project=GRPO \
