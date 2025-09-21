@@ -12,3 +12,4 @@ wandb
 flash-attn==2.7.4.post1
 torchdata
 verifiers
+math-python @ git+https://github.com/PrimeIntellect-ai/verifiers.git@main#subdirectory=environments/math_python

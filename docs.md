@@ -253,6 +253,9 @@ data.prompts_per_rollout=4 data.responses_per_prompt=2
   - `VERIFIERS_ENV_ID` (defaults to `math_python`).
   - `VERIFIERS_ENV_ARGS` (JSON dict forwarded to `vf.load_environment`).
 - Install dependencies: add `verifiers` to your env (`pip install -r requirements.txt`).
+- Default install also pulls `math-python` from the Verifiers repo so the stock adapter
+  can resolve `VERIFIERS_ENV_ID=math_python` immediately. Override the env var if you
+  ship a different package.
 - Hydra: set `rollout.env_path=environments/verifiers_adapter.py`; mirror the Verifiers env’s turn budget with `rollout.max_turns`.
 - Dataset: continue supplying `messages`/`answer`; optional `info`/`task` can be plumbed by extending the dataloader.
 - Runtime: the adapter keeps per-conversation state, calls Verifiers’ rubric for reward, and forwards tool traffic returned by the env. No changes to `train/workers/rollout.py` are required.
