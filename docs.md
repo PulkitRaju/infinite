@@ -1,10 +1,12 @@
-# Infinite RL Environments — Integration Guide
+# Infinite RL Execution Guide
 
-This document explains how “environments” plug into Infinite’s GRPO loop, what each stage does, and how to add or adapt a custom environment module. It is written for engineers wiring new reward functions, tool calls, or datasets into the existing training pipeline.
+This is the runnable walkthrough: start at the launch command, follow every call the code makes, and see exactly where your environment hooks fire. Read it like an execution trace—because that’s how it’s organized.
 
 ## Table of Contents
-- Overview and Purpose
-- End‑to‑End Flow (Call Graph)
+- Start Here: Launch Command
+- Full Execution Flow (Call Graph)
+- Step‑By‑Step Execution
+- README Claims vs. Reality
 - Environment Contract (What You Must Implement)
 - Data Contract (What Training Expects)
 - Key Configuration (Hydra/YAML)
@@ -18,13 +20,9 @@ This document explains how “environments” plug into Infinite’s GRPO loop, 
 
 ---
 
-## README Entry Flow + Reality Check
+## Start Here: Launch Command
 
-This section starts where the README tells you to start (the quick‑start commands), then calls out anything missing or stubbed so you know exactly what runs today.
-
-### How You Trigger Training (per README)
-
-Single GPU (works with required overrides):
+You must provide the pieces left `null` in `config/grpo.yaml`. This is the minimal single‑GPU invocation (swap in your own paths/models/env):
 
 ```
 python -m train.trainer.grpo --config-name grpo \
@@ -37,110 +35,100 @@ python -m train.trainer.grpo --config-name grpo \
   trainer.use_wandb=false
 ```
 
-Multi‑GPU (per README):
-
-```
-torchrun --nproc_per_node=8 -m train.trainer.grpo --config-name grpo \
-  <the same overrides as above>
-```
-
-Important: the base config (`config/grpo.yaml`) ships with several `null` values. Running the bare `python -m train.trainer.grpo --config-name grpo` will fail unless you supply the minimum set of overrides shown above (or use `./launch_grpo.sh`).
-
-### Feature/Claim → Status
-
-- Distributed training across multiple GPUs — Implemented
-  - Uses `torch.distributed` with `nccl` and device meshes; entry via `torchrun`. See `train/utils/comm.py` and worker meshes in `train/workers/base.py`.
-- FSDP (Fully Sharded Data Parallel) — Implemented
-  - Wrapped via `torch.distributed.fsdp` with `HYBRID_SHARD` and BF16 mixed precision. See `train/utils/parallelism.py::prepare_dp_model`.
-- Tensor + Sequence Parallelism — Implemented
-  - Uses DTensor `Colwise/Rowwise/SequenceParallel` plans for LLaMA/Qwen actor/critic. See `train/utils/parallelism.py`.
-- Zigzag Ring Attention — Partial/Stub
-  - Minimal `ring_attn_manager` wrapper exists for shapes, but no full zigzag/ring attention algorithm is integrated; models use `flash_attention_2`. See `train/utils/ring_attn.py` and `attn_implementation="flash_attention_2"` in workers.
-- Worker architecture (Actor, Critic, Rollout) — Implemented
-  - Present under `train/workers/` with offloading, logging, and TP/DP/FSDP.
-- Multi‑turn dataset handling — Implemented
-  - Controlled by `rollout.max_turns` and `env.interact(...)`.
-- Checkpointing — Implemented
-  - Save/load for actor/(critic) and scheduler states. See `train/utils/checkpointing.py`.
-- Environment rewards (eq/orz/searchr1) — Implemented
-  - Ready to use; search requires running the local FastAPI service.
-- Hydra configuration — Implemented
-  - All runtime config via `config/grpo.yaml` and CLI overrides.
-- Rubric‑driven prioritized replay — UNIMPLEMENTED
-  - Mentioned in README; no `rubric/` module exists; prioritization scheduler is still in the roadmap (`high_level_plan.md`).
-- Planner / prioritized replay scheduler — UNIMPLEMENTED
-  - No `planner/` directory in the repo; scheduling logic not integrated.
-- “Continual learning optimization / adaptive replay strategies” — UNIMPLEMENTED
-  - Concepts described; concrete replay scheduler and rubric feedback not wired into training yet.
-
-### Entry‑to‑Exit Narrative (annotated)
-
-- Trigger
-  - You run the GRPO entrypoint with overrides (model, data, env). Purpose: start an RL loop around your chosen model.
-  - Requires: non‑null `data.*`, `actor.model_name`, and `rollout.env_path`.
-  - Produces: initialized workers, dataloaders, and an SGLang engine for generation.
-
-- Rollouts
-  - The rollout worker formats prompts, queries the engine, calls your env’s `interact` (optional tools), then computes `reward_fn`.
-  - Requires: tokenizer, engine, env module; optional external services (e.g., search API).
-  - Produces: tokenized trajectories plus a scalar reward on the final action token.
-
-- Learning
-  - Advantages are computed (REINFORCE or GAE); optional KL regularization applies; actor/(critic) update parameters.
-  - Requires: configured `adv.estimator`, KL settings; optimizer/scheduler.
-  - Produces: improved policy, logs, and checkpoints.
-
-- What’s Not Hooked Up Yet
-  - Prioritized replay driven by rubrics or pass‑rate EMA (as per README vision) is not yet part of the sampling loop; every batch currently draws uniformly from the dataset you provide.
-  - There is no planner that reschedules domains/instances based on rubric signals; the `high_level_plan.md` documents intended design.
+Multi‑GPU just wraps the same overrides in `torchrun --nproc_per_node=N`. Without these overrides the run will error before rollouts begin.
 
 ---
 
-## Overview and Purpose
-- Goal: optimize a policy to produce better answers using scalar rewards computed by a simple “environment” module you control.
-- The environment module is intentionally lightweight: it can be a single `.py` file exposing two functions. This keeps rewards and tool logic decoupled from the trainer/actor.
-- Who consumes it: the Rollout worker imports your module, calls it to optionally inject tool outputs, and asks it to score the final conversation. Those scores drive GRPO updates to the actor (and optionally a critic if you use GAE).
-
----
-
-## End‑to‑End Flow (Call Graph)
+## Full Execution Flow (Call Graph)
 
 ```
 CLI
 └─ python -m train.trainer.grpo --config-name grpo
-   └─ GRPOTrainer.main()  (train/trainer/grpo.py)
-      ├─ init dataloaders  → RLDataset(load_dataset(...))
-      ├─ init workers      → Actor, (Critic), Rollout
-      │   └─ Rollout.__init__
-      │       ├─ import env from config.rollout.env_path
-      │       └─ start SGLang Engine (model_path=config.rollout.model_name)
-      └─ train() loop
-          ├─ for batch in dataloader:
-          │   └─ tensor_dicts = Rollout.__call__(data_list, train=True, step)
-          │       ├─ format prompt (tokenizer.apply_chat_template)
-          │       ├─ LLM generate (Engine.async_generate)
-          │       ├─ env.interact(messages)    # optional tools
-          │       ├─ reward = env.reward_fn(messages, answer)
-          │       └─ tokenize_messages(...) → states/actions/masks + final reward
-          ├─ compute_approx_kl / compute_advantages
-          ├─ actor.update(...) [+ critic.update(...)]
-          ├─ save_ckpt(...)
-          └─ Rollout.update(...)  # hot‑swap weights into engine
+   └─ hydra.main → train/trainer/grpo.py::main
+      └─ GRPOTrainer(config)
+         ├─ Trainer.__init__  (resolve config, optional wandb.init)
+         ├─ get_dataloader(train/test) → RLDataset → load_dataset
+         ├─ Actor(config.actor)              ┐
+         │   └─ Worker base → prepare_device_mesh → load tokenizer/model
+         ├─ (Critic if adv.estimator == "gae")  │  shared initialization path
+         └─ Rollout(config.rollout)              │
+             ├─ import env module (config.rollout.env_path)
+             └─ start SGLang Engine(model_path)
+
+         └─ train()
+            ├─ load_ckpt → restore actor/(critic)/scheduler
+            ├─ for batch in train_dataloader:
+            │   ├─ tensor_dicts = Rollout.__call__(data_list, train=True, step)
+            │   │   ├─ format prompt (tokenizer.apply_chat_template)
+            │   │   ├─ Engine.async_generate
+            │   │   ├─ env.interact(messages)  # optional tool replies
+            │   │   └─ reward = env.reward_fn(messages, answer)
+            │   │      tokenize_messages → states/actions/masks + final reward
+            │   ├─ optional ref_actor.compute_logps / critic.compute_values
+            │   ├─ compute_approx_kl / compute_advantages
+            │   ├─ actor.update (and critic.update)
+            │   ├─ save_ckpt
+            │   └─ Rollout.update → push new weights into engine
+            └─ save_model(actor)
 ```
 
-What each stage needs and produces:
-- Dataloading
-  - Needs: dataset files with `messages` and `answer` fields.
-  - Produces: lists of examples for rollouts; optionally duplicated per prompt.
-- Rollout Generation
-  - Needs: tokenizer, model, and your env’s `interact`/`reward_fn`.
-  - Produces: trajectories, metrics, and a scalar reward per sample.
-- Advantage + KL
-  - Needs: tensorized trajectories, chosen estimator (reinforce/gae), KL settings.
-  - Produces: advantages and, if configured, KL‑adjusted rewards.
-- Updates + Sync
-  - Needs: optimizer/scheduler, actor (and critic), state dicts.
-  - Produces: improved policy, checkpoints, and refreshed engine weights.
+Keep this mental map handy; the next section walks the same route with commentary and code pointers.
+
+---
+
+## Step‑By‑Step Execution
+
+1. **Hydra boots the trainer** (`train/trainer/grpo.py:161-174`).
+   - Resolves the config, broadcasts it, and initializes Weights & Biases if enabled.
+   - Purpose: lock in hyperparameters and logging before any distributed work.
+
+2. **Distributed topology is carved out** (`train/utils/comm.py:7-23`, `train/workers/base.py:34-83`).
+   - `initialize_global_process_group` sets up NCCL and pins each rank to its CUDA device.
+   - Two meshes are built: `model_device_mesh` over (ddp, fsdp, tp) for sharded parameters and `device_mesh` over (dp, sp, tp) for rollout scattering.
+
+3. **Tokenizers and models load with retry logic** (`train/workers/base.py:14-57`, `train/workers/actor.py:17-46`, `train/workers/critic.py:17-38`).
+   - `_load_with_retry` pulls artifacts from Hugging Face, handling rate limits via exponential backoff.
+   - `prepare_model_optimizer` applies tensor/sequence parallel transforms (`train/utils/parallelism.py`) and wraps the result in FSDP with BF16 mixed precision. Optimizers live on CPU unless actively stepping to support offloading.
+
+4. **Environment module + inference engine come online** (`train/workers/rollout.py:25-51,84-145`).
+   - `importlib` loads the file pointed to by `rollout.env_path`, expecting `interact`/`reward_fn`.
+   - SGLang’s `Engine` initializes per rank (TP shard aware), ready to answer generation requests.
+
+5. **Datasets stream prompts** (`train/trainer/grpo.py:49-64`, `train/datasets/rl.py:4-29`).
+   - `RLDataset` reads JSON/JSONL/CSV/Parquet via `datasets.load_dataset` and expands each record `responses_per_prompt` times on the fly for exploration.
+
+6. **Rollouts build trajectories** (`train/workers/rollout.py:92-160`).
+   - Prompts are rendered through `tokenizer.apply_chat_template` (configurable), the engine generates, and assistant messages are appended to the running conversation.
+   - If `max_turns > 1`, the newest assistant response is scanned for tool triggers; `interact` can emit tool messages (e.g., search results) that get spliced in before the next generation turn.
+   - When the loop exits (max turns reached or no tool call), `reward_fn` scores the full transcript and `tokenize_messages` converts it to tensors with the reward attached to the final timestep only.
+
+7. **Policy/Value learning happens** (`train/trainer/grpo.py:107-158`).
+   - Optional reference logprobs (`ref_actor`) and critic values feed into either REINFORCE or GAE advantage estimators.
+   - Actor updates apply PPO‑style clipping, entropy bonuses, and optional KL penalties before stepping the optimizer/scheduler. Critics (if present) perform clipped MSE updates against returns.
+
+8. **State sync + persistence** (`train/utils/checkpointing.py`, `train/workers/rollout.py:162-220`).
+   - Checkpoints capture model/optimizer/scheduler state every iteration; `Rollout.update` broadcasts fresh weights into the SGLang engine so the next rollout queries the latest policy.
+
+This is the loop you are extending when you add a new environment or dataset.
+
+---
+
+## README Claims vs. Reality
+
+- **Distributed training across multiple GPUs** — Implemented (`torchrun`, meshes, NCCL).
+- **FSDP** — Implemented via `torch.distributed.fsdp` with HYBRID_SHARD and BF16.
+- **Tensor + sequence parallelism** — Implemented using DTensor plans in `train/utils/parallelism.py`.
+- **Zigzag ring attention** — Partial. Wrapper enforces shapes but the actual model uses `flash_attention_2`; zigzag scheduling is not imported.
+- **Worker architecture (actor/critic/rollout)** — Implemented and actively used.
+- **Multi‑turn rollouts** — Implemented via `rollout.max_turns` + env `interact`.
+- **Checkpointing** — Implemented (`train/utils/checkpointing.py`).
+- **Environment rewards (eq/orz/searchr1)** — Implemented, though `searchr1` assumes the local FastAPI search service is running.
+- **Hydra configuration** — Implemented; all knobs live under `config/grpo.yaml`.
+- **Rubric‑driven prioritized replay** — UNIMPLEMENTED. No `rubric/` runtime, scheduler still on roadmap (`high_level_plan.md`).
+- **Planner / prioritized replay scheduler** — UNIMPLEMENTED. No `planner/` module wired in.
+- **Adaptive replay / continual learning claims** — UNIMPLEMENTED beyond the plain GRPO loop.
+
+Keep these gaps in mind when planning future work; the rest of this document focuses on what exists today.
 
 ---
 
