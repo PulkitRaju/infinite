@@ -78,8 +78,7 @@ torchrun \
     trainer.use_wandb=true \
     trainer.n_epochs=1 \
     trainer.test_freq=999999 \
-    trainer.save_freq=null \
-    trainer.save_dir=null
+    trainer.save_freq=null
 
 # GRPO-specific configuration:
 # - adv.estimator=reinforce (Dr. GRPO default)

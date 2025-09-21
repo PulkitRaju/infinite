@@ -68,11 +68,14 @@ def load_ckpt(trainer, workers):
     ckpt = get_ckpt(trainer, workers, 0)
     checkpoint_id = trainer.config.trainer.load_ckpt_from
     if checkpoint_id == "latest":
-        save_dirs = glob.glob(f"{trainer.config.trainer.save_dir}/step*")
+        save_dir = trainer.config.trainer.save_dir
+        if save_dir is None or str(save_dir).strip() == "":
+            raise ValueError("trainer.save_dir must be a non-empty path when loading the latest checkpoint.")
+        save_dirs = glob.glob(f"{save_dir}/step*")
         checkpoint_id = max(
             save_dirs, key=lambda dir: int(dir.split("/step")[-1])
         )
-    
+
     dcp.load(ckpt, checkpoint_id)
     trainer.train_dataloader.load_state_dict(ckpt["dataloader"])
     for idx, worker in enumerate(workers):
@@ -87,9 +90,13 @@ def save_ckpt(trainer, workers, step):
     if trainer.config.trainer.save_freq is None or step % trainer.config.trainer.save_freq != 0:
         return
 
+    save_dir = trainer.config.trainer.save_dir
+    if save_dir is None or str(save_dir).strip() == "":
+        raise ValueError("trainer.save_dir must be a non-empty path when saving checkpoints.")
+
     dcp.save(
         get_ckpt(trainer, workers, step),
-        checkpoint_id=f"{trainer.config.trainer.save_dir}/step{step}"
+        checkpoint_id=f"{save_dir}/step{step}"
     )
 
 def save_model(trainer, worker, rm=False):
@@ -97,6 +104,9 @@ def save_model(trainer, worker, rm=False):
     Reference: RL2/utils/checkpointing.py lines 82-106
     """
     save_dir = trainer.config.trainer.save_dir
+    if save_dir is None or str(save_dir).strip() == "":
+        raise ValueError("trainer.save_dir must be a non-empty path when saving the final model.")
+
     if trainer.config.trainer.save_freq is not None:
         save_dir += "/latest"
     state_dict = get_state_dict(
