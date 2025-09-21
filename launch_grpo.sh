@@ -60,12 +60,12 @@ echo ""
 #     trainer.save_freq=32
 
 torchrun \
-    --nproc_per_node=1 \
+    --nproc_per_node=8 \
     -m train.trainer.grpo \
-    data.train_data_path=verifiers:train \
-    data.test_data_path=verifiers:eval \
+    data.train_data_path=verifiers:train?limit=32 \
+    data.test_data_path=verifiers:eval?limit=32 \
     data.prompts_per_rollout=4 \
-    data.responses_per_prompt=2 \
+    data.responses_per_prompt=1 \
     actor.model_name=Qwen/Qwen2-1.5B-Instruct \
     actor.max_length_per_device=512 \
     rollout.train_sampling_params.max_new_tokens=128 \
@@ -74,10 +74,12 @@ torchrun \
     adv.estimator=reinforce \
     adv.norm_var=true \
     trainer.project=GRPO \
-    trainer.experiment_name=grpo-math-stub \
-    trainer.use_wandb=false \
-    trainer.test_freq=4 \
-    trainer.save_freq=8
+    trainer.experiment_name=grpo-math-verifiers-integration \
+    trainer.use_wandb=true \
+    trainer.n_epochs=1 \
+    trainer.test_freq=999999 \
+    trainer.save_freq=null \
+    trainer.save_dir=null
 
 # GRPO-specific configuration:
 # - adv.estimator=reinforce (Dr. GRPO default)
