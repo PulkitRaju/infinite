@@ -79,12 +79,15 @@ def compute_reinforce_adv(
         [td["rewards"].sum() for td in tensor_dicts]
     ).view(-1, responses_per_prompt)
 
+    # Use population std (correction=0) to avoid NaNs/Warnings when
+    # responses_per_prompt == 1. This keeps denom finite and defers
+    # stability to the +eps below.
     if global_norm:
         baseline = rewards.mean()
-        std = rewards.std()
+        std = rewards.std(unbiased=False)
     else:
-        baseline = rewards.mean(-1).unsqueeze(-1)
-        std = rewards.std(-1).unsqueeze(-1)
+        baseline = rewards.mean(-1, keepdim=True)
+        std = rewards.std(-1, unbiased=False, keepdim=True)
 
     advantages = rewards - baseline
     if norm_var:
