@@ -18,6 +18,84 @@ This document explains how “environments” plug into Infinite’s GRPO loop, 
 
 ---
 
+## README Entry Flow + Reality Check
+
+This section starts where the README tells you to start (the quick‑start commands), then calls out anything missing or stubbed so you know exactly what runs today.
+
+### How You Trigger Training (per README)
+
+Single GPU (works with required overrides):
+
+```
+python -m train.trainer.grpo --config-name grpo \
+  data.train_data_path=stub/data/math/train.jsonl \
+  data.test_data_path=stub/data/math/test.jsonl \
+  data.prompts_per_rollout=4 data.responses_per_prompt=2 \
+  actor.model_name=Qwen/Qwen2-1.5B-Instruct \
+  rollout.train_sampling_params.max_new_tokens=128 \
+  rollout.env_path=environments/eq.py \
+  trainer.use_wandb=false
+```
+
+Multi‑GPU (per README):
+
+```
+torchrun --nproc_per_node=8 -m train.trainer.grpo --config-name grpo \
+  <the same overrides as above>
+```
+
+Important: the base config (`config/grpo.yaml`) ships with several `null` values. Running the bare `python -m train.trainer.grpo --config-name grpo` will fail unless you supply the minimum set of overrides shown above (or use `./launch_grpo.sh`).
+
+### Feature/Claim → Status
+
+- Distributed training across multiple GPUs — Implemented
+  - Uses `torch.distributed` with `nccl` and device meshes; entry via `torchrun`. See `train/utils/comm.py` and worker meshes in `train/workers/base.py`.
+- FSDP (Fully Sharded Data Parallel) — Implemented
+  - Wrapped via `torch.distributed.fsdp` with `HYBRID_SHARD` and BF16 mixed precision. See `train/utils/parallelism.py::prepare_dp_model`.
+- Tensor + Sequence Parallelism — Implemented
+  - Uses DTensor `Colwise/Rowwise/SequenceParallel` plans for LLaMA/Qwen actor/critic. See `train/utils/parallelism.py`.
+- Zigzag Ring Attention — Partial/Stub
+  - Minimal `ring_attn_manager` wrapper exists for shapes, but no full zigzag/ring attention algorithm is integrated; models use `flash_attention_2`. See `train/utils/ring_attn.py` and `attn_implementation="flash_attention_2"` in workers.
+- Worker architecture (Actor, Critic, Rollout) — Implemented
+  - Present under `train/workers/` with offloading, logging, and TP/DP/FSDP.
+- Multi‑turn dataset handling — Implemented
+  - Controlled by `rollout.max_turns` and `env.interact(...)`.
+- Checkpointing — Implemented
+  - Save/load for actor/(critic) and scheduler states. See `train/utils/checkpointing.py`.
+- Environment rewards (eq/orz/searchr1) — Implemented
+  - Ready to use; search requires running the local FastAPI service.
+- Hydra configuration — Implemented
+  - All runtime config via `config/grpo.yaml` and CLI overrides.
+- Rubric‑driven prioritized replay — UNIMPLEMENTED
+  - Mentioned in README; no `rubric/` module exists; prioritization scheduler is still in the roadmap (`high_level_plan.md`).
+- Planner / prioritized replay scheduler — UNIMPLEMENTED
+  - No `planner/` directory in the repo; scheduling logic not integrated.
+- “Continual learning optimization / adaptive replay strategies” — UNIMPLEMENTED
+  - Concepts described; concrete replay scheduler and rubric feedback not wired into training yet.
+
+### Entry‑to‑Exit Narrative (annotated)
+
+- Trigger
+  - You run the GRPO entrypoint with overrides (model, data, env). Purpose: start an RL loop around your chosen model.
+  - Requires: non‑null `data.*`, `actor.model_name`, and `rollout.env_path`.
+  - Produces: initialized workers, dataloaders, and an SGLang engine for generation.
+
+- Rollouts
+  - The rollout worker formats prompts, queries the engine, calls your env’s `interact` (optional tools), then computes `reward_fn`.
+  - Requires: tokenizer, engine, env module; optional external services (e.g., search API).
+  - Produces: tokenized trajectories plus a scalar reward on the final action token.
+
+- Learning
+  - Advantages are computed (REINFORCE or GAE); optional KL regularization applies; actor/(critic) update parameters.
+  - Requires: configured `adv.estimator`, KL settings; optimizer/scheduler.
+  - Produces: improved policy, logs, and checkpoints.
+
+- What’s Not Hooked Up Yet
+  - Prioritized replay driven by rubrics or pass‑rate EMA (as per README vision) is not yet part of the sampling loop; every batch currently draws uniformly from the dataset you provide.
+  - There is no planner that reschedules domains/instances based on rubric signals; the `high_level_plan.md` documents intended design.
+
+---
+
 ## Overview and Purpose
 - Goal: optimize a policy to produce better answers using scalar rewards computed by a simple “environment” module you control.
 - The environment module is intentionally lightweight: it can be a single `.py` file exposing two functions. This keeps rewards and tool logic decoupled from the trainer/actor.
@@ -238,4 +316,3 @@ python -m train.trainer.grpo --config-name grpo \
 ---
 
 Happy hacking! If you add a new env, consider placing it under `environments/` and documenting any external dependencies inline at the top of the file.
-
