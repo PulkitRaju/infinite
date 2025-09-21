@@ -64,7 +64,7 @@ torchrun \
     -m train.trainer.grpo \
     'data.train_data_path="verifiers:train?limit=32"' \
     'data.test_data_path="verifiers:eval?limit=32"' \
-    data.prompts_per_rollout=4 \
+    data.prompts_per_rollout=8 \
     data.responses_per_prompt=4 \
     actor.model_name=Qwen/Qwen2-1.5B-Instruct \
     actor.max_length_per_device=512 \
