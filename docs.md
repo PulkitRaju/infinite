@@ -260,6 +260,7 @@ data.prompts_per_rollout=4 data.responses_per_prompt=2
 - Dataset: continue supplying `messages`/`answer`; optional `info`/`task` can be plumbed by extending the dataloader.
 - Runtime: the adapter keeps per-conversation state, calls Verifiers’ rubric for reward, and forwards tool traffic returned by the env. No changes to `train/workers/rollout.py` are required.
 - Smoke test: `python -m train.trainer.grpo --config-name grpo rollout.env_path=environments/verifiers_adapter.py rollout.max_turns=<vf_max_turns>` using the stub dataset before scaling up.
+- Dataset shortcut: set `data.train_data_path=verifiers:train` (and `test_data_path=verifiers:eval`) to pull prompts directly from the loaded Verifiers environment without exporting JSONL. Append `?limit=128` to sample.
 
 ---
 

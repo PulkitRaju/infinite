@@ -62,8 +62,8 @@ echo ""
 torchrun \
     --nproc_per_node=1 \
     -m train.trainer.grpo \
-    data.train_data_path=stub/data/math/train.jsonl \
-    data.test_data_path=stub/data/math/test.jsonl \
+    data.train_data_path=verifiers:train \
+    data.test_data_path=verifiers:eval \
     data.prompts_per_rollout=4 \
     data.responses_per_prompt=2 \
     actor.model_name=Qwen/Qwen2-1.5B-Instruct \

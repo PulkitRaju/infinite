@@ -20,7 +20,8 @@ import logging
 import os
 import threading
 from copy import deepcopy
-from typing import Any, Dict, List
+from functools import lru_cache
+from typing import Any, Dict, Iterable, List
 
 import verifiers as vf
 
@@ -164,3 +165,62 @@ def reward_fn(messages: List[Dict[str, Any]], answer: Any) -> float:
         _cleanup_session(messages)
 
     return reward
+
+
+def get_environment():
+    """Expose the loaded Verifiers environment (singleton)."""
+    return _VF_ENV
+
+
+def _resolve_split(split: str) -> str:
+    split = (split or "train").lower()
+    if split in {"train", "training"}:
+        return "dataset"
+    if split in {"eval", "evaluation", "test", "validation", "dev"}:
+        return "eval_dataset"
+    raise ValueError(f"Unsupported Verifiers dataset split: {split}")
+
+
+def _normalize_answer(row: Dict[str, Any]) -> Any:
+    if "answer" in row and row["answer"] is not None:
+        return row["answer"]
+    info = row.get("info")
+    if isinstance(info, dict) and "answer" in info:
+        return info["answer"]
+    return ""
+
+
+@lru_cache(maxsize=None)
+def _cached_records(split: str) -> tuple:
+    attr_name = _resolve_split(split)
+    dataset = getattr(_VF_ENV, attr_name, None)
+    if dataset is None:
+        if attr_name == "eval_dataset":
+            dataset = getattr(_VF_ENV, "dataset", None)
+        if dataset is None:
+            raise ValueError(
+                f"Verifiers environment '{_ENV_ID}' does not provide a dataset for split '{split}'"
+            )
+    records: List[Dict[str, Any]] = []
+    for row in dataset:
+        prompt = row.get("prompt")
+        if prompt is None:
+            raise KeyError("Verifiers dataset row missing 'prompt' field")
+        record = {
+            "messages": prompt,
+            "answer": _normalize_answer(row),
+        }
+        if "info" in row:
+            record["info"] = row["info"]
+        records.append(record)
+    return tuple(records)
+
+
+def iter_dataset_records(split: str = "train") -> Iterable[Dict[str, Any]]:
+    """Yield dataset examples (messages/answer[/info]) from the Verifiers env."""
+    for record in _cached_records(split):
+        yield {
+            "messages": deepcopy(record["messages"]),
+            "answer": record["answer"],
+            **({"info": record["info"]} if "info" in record else {}),
+        }

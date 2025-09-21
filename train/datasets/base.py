@@ -1,4 +1,6 @@
 import os
+from urllib.parse import parse_qs
+
 import datasets
 import torch
 from torch.utils.data import Dataset
@@ -9,6 +11,28 @@ def load_dataset(data_path):
     """
     Reference: RL2/datasets/base.py lines 8-21
     """
+    if data_path.startswith("verifiers:"):
+        spec = data_path[len("verifiers:") :]
+        if "?" in spec:
+            split_part, query = spec.split("?", 1)
+            params = parse_qs(query, keep_blank_values=True)
+        else:
+            split_part, params = spec, {}
+        split = split_part or "train"
+        limit = int(params.get("limit", [-1])[0]) if params else -1
+        from environments import verifiers_adapter as vf_adapter  # lazy import
+
+        records = []
+        for idx, record in enumerate(vf_adapter.iter_dataset_records(split=split)):
+            records.append(record)
+            if limit >= 0 and idx + 1 >= limit:
+                break
+        if not records:
+            raise ValueError(
+                f"No records produced by Verifiers dataset for split '{split}'"
+            )
+        return datasets.Dataset.from_list(records)
+
     if "@" in data_path:
         split, data_path = data_path.split("@")
     else:

@@ -3,8 +3,8 @@
 # Configured for GRPO with adv.norm_var=true, kl.reward_estimator=k3, adv.estimator=reinforce
 
 data:
-  train_data_path: null
-  test_data_path: null
+  train_data_path: verifiers:train
+  test_data_path: verifiers:eval
   prompts_per_rollout: null
   responses_per_prompt: null
   
