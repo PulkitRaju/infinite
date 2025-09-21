@@ -213,14 +213,7 @@ class Rollout(Worker):
                 rewards = torch.FloatTensor(
                     [td["rewards"].sum() for td in tensor_dicts]
                 ).view(-1, self.config.responses_per_prompt)
-                # With a single response per prompt, std is undefined for
-                # unbiased estimation and would warn/NaN. In that case, do
-                # not filter anything. Otherwise treat zero-variance rows as
-                # low-signal and filter them.
-                if self.config.responses_per_prompt and self.config.responses_per_prompt < 2:
-                    are_filtered = [False] * rewards.shape[0]
-                else:
-                    are_filtered = (rewards.std(-1, unbiased=False) == 0).tolist()
+                are_filtered = (rewards.std(-1) == 0).tolist()
                 wandb.log({
                     "dynamic_filtering_ratio": sum(are_filtered) / len(are_filtered)
                 }, step=step)
