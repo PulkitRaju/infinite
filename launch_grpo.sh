@@ -62,8 +62,8 @@ echo ""
 torchrun \
     --nproc_per_node=8 \
     -m train.trainer.grpo \
-    data.train_data_path=verifiers:train?limit=32 \
-    data.test_data_path=verifiers:eval?limit=32 \
+    data.train_data_path='verifiers:train?limit=32' \
+    data.test_data_path='verifiers:eval?limit=32' \
     data.prompts_per_rollout=4 \
     data.responses_per_prompt=1 \
     actor.model_name=Qwen/Qwen2-1.5B-Instruct \
