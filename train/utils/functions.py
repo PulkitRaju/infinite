@@ -2,9 +2,7 @@ import torch
 import torch.distributed as dist
 
 def differentiable_all_reduce(tensor, device_mesh):
-    """
-    Reference: RL2/utils/functions.py lines 5-13
-    """
+    """All-reduce that preserves gradients for autograd-aware tensors."""
     detached_tensor = tensor.detach()
     dist.all_reduce(
         detached_tensor,
@@ -14,9 +12,7 @@ def differentiable_all_reduce(tensor, device_mesh):
     return tensor + detached_tensor - tensor.detach()
 
 def compute_logsumexp(logits, device_mesh, chunk_size=1024):
-    """
-    Reference: RL2/utils/functions.py lines 15-45
-    """
+    """Compute log-sum-exp across sharded vocab shards in a stable way."""
     # When using tensor parallelism, each device only has a shard of logits.
     # We firstly compute logsumexp of the sharded logits on each device,
     # and then perform logsumexp across devices, which is equivalent to 
@@ -48,9 +44,7 @@ def compute_logsumexp(logits, device_mesh, chunk_size=1024):
     return torch.logsumexp(logsumexps, -1)
 
 def gather_action_logits(logits, actions, device_mesh):
-    """
-    Reference: RL2/utils/functions.py lines 47-87
-    """
+    """Collect action logits across tensor-parallel shards."""
     # When using tensor parallelism, each device only has a shard of logits.
     # On each device, we gather logits for actions on the device, and then 
     # perform AllReduce to collect the complete logits.
@@ -92,9 +86,7 @@ def gather_action_logits(logits, actions, device_mesh):
     return differentiable_all_reduce(action_logits, device_mesh)
 
 def compute_entropy(logits, logsumexp, device_mesh):
-    """
-    Reference: RL2/utils/functions.py lines 89-94
-    """
+    """Compute token-level entropy under tensor parallelism."""
     probs = torch.exp(logits - logsumexp.unsqueeze(-1))
     return logsumexp - differentiable_all_reduce(
         (probs * logits).sum(-1), device_mesh
@@ -107,10 +99,7 @@ def aggregate_values(
     total_actions=None,
     total_sequences=None
 ):
-    """
-    Reference: RL2/utils/functions.py lines 96-143
-    Simplified version focusing on all_token_mean for minimal GRPO
-    """
+    """Aggregate tensors according to the configured reduction strategy."""
     if isinstance(tensor, tuple):
         return tuple(
             aggregate_values(

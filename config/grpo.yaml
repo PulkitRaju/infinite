@@ -1,10 +1,9 @@
-# GRPO Configuration - Ported from RL2/trainer/config/ppo.yaml
-# Reference: RL2/trainer/config/ppo.yaml lines 1-104
+# GRPO Configuration for reinforcement learning
 # Configured for GRPO with adv.norm_var=true, kl.reward_estimator=k3, adv.estimator=reinforce
 
 data:
-  train_data_path: null
-  test_data_path: null
+  train_data_path: verifiers:train
+  test_data_path: verifiers:eval
   prompts_per_rollout: null
   responses_per_prompt: null
   
@@ -54,8 +53,8 @@ rollout:
   test_sampling_params:
     temperature: 0.0
     max_new_tokens: ${rollout.train_sampling_params.max_new_tokens}
-  max_turns: 1
-  env_path: null
+  max_turns: 3
+  env_path: environments/verifiers_adapter.py
   dynamic_filtering: true
 
 ref_actor:

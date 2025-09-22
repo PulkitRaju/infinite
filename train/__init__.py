@@ -1,1 +1,1 @@
-# Minimal GRPO RL Implementation - Ported from RL2
+# Minimal GRPO RL Implementation

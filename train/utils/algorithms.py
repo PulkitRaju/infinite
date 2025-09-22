@@ -6,9 +6,7 @@ def compute_approx_kl(
     ref_logps: torch.Tensor,
     estimator: str
 ) -> torch.Tensor:
-    """
-    Reference: RL2/utils/algorithms.py lines 4-20
-    """
+    """Compute approximate KL divergence using the chosen estimator."""
     # The (ref_)logps of non-action tokens are zero (see `Actor.
     # forward`), so their corresponding kl_term will also be zero.
 
@@ -23,9 +21,7 @@ def compute_approx_kl(
         raise NotImplementedError
 
 def compute_gae(tensor_dicts, gamma, lamda):
-    """
-    Reference: RL2/utils/algorithms.py lines 22-61
-    """
+    """Generalized Advantage Estimation across collected trajectories."""
     # extract rewards and values of action tokens
     rewards, values, action_mask = [], [], []
     for td in tensor_dicts:
@@ -71,10 +67,7 @@ def compute_reinforce_adv(
     global_norm: bool,
     norm_var: bool
 ):
-    """
-    Reference: RL2/utils/algorithms.py lines 63-88
-    GRPO-specific: Uses norm_var=True for variance normalization
-    """
+    """REINFORCE-style advantage computation with optional normalization."""
     rewards = torch.FloatTensor(
         [td["rewards"].sum() for td in tensor_dicts]
     ).view(-1, responses_per_prompt)

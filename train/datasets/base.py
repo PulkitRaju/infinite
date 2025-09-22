@@ -1,4 +1,6 @@
 import os
+from urllib.parse import parse_qs
+
 import datasets
 import torch
 from torch.utils.data import Dataset
@@ -6,9 +8,29 @@ from torchdata.stateful_dataloader import StatefulDataLoader
 
 # TODO (P1): support concatnating multiple datasets
 def load_dataset(data_path):
-    """
-    Reference: RL2/datasets/base.py lines 8-21
-    """
+    """Load a dataset from local files, Hugging Face, or the verifiers adapter."""
+    if data_path.startswith("verifiers:"):
+        spec = data_path[len("verifiers:") :]
+        if "?" in spec:
+            split_part, query = spec.split("?", 1)
+            params = parse_qs(query, keep_blank_values=True)
+        else:
+            split_part, params = spec, {}
+        split = split_part or "train"
+        limit = int(params.get("limit", [-1])[0]) if params else -1
+        from environments import verifiers_adapter as vf_adapter  # lazy import
+
+        records = []
+        for idx, record in enumerate(vf_adapter.iter_dataset_records(split=split)):
+            records.append(record)
+            if limit >= 0 and idx + 1 >= limit:
+                break
+        if not records:
+            raise ValueError(
+                f"No records produced by Verifiers dataset for split '{split}'"
+            )
+        return datasets.Dataset.from_list(records)
+
     if "@" in data_path:
         split, data_path = data_path.split("@")
     else:
@@ -23,9 +45,7 @@ def load_dataset(data_path):
         return datasets.load_dataset(data_path, split=split)
 
 def get_dataloader(dataset, batch_size):
-    """
-    Reference: RL2/datasets/base.py lines 23-30
-    """
+    """Create a stateful dataloader with shuffling and custom collate."""
     return StatefulDataLoader(
         dataset,
         batch_size,
@@ -41,9 +61,7 @@ def tokenize_messages(
     max_length=None,
     shift=True
 ):
-    """
-    Reference: RL2/datasets/base.py lines 32-79
-    """
+    """Tokenize a conversation into state/action tensors for RL training."""
     states, actions, action_mask = [], [], []
     for idx, message in enumerate(messages):
 
@@ -86,9 +104,7 @@ def tokenize_messages(
     }
 
 class BaseDataset(Dataset):
-    """
-    Reference: RL2/datasets/base.py lines 81-94
-    """
+    """Dataset wrapper that performs lazy tokenization and caching."""
     def __init__(
         self,
         config,

@@ -1,6 +1,3 @@
-# Ported from /Users/abhishekmishra/Documents/infinite/RL2/RL2/workers/actor.py
-# Original implementation from RL2 repository
-
 from collections import defaultdict
 import torch
 from transformers import AutoModelForCausalLM

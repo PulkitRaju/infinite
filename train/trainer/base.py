@@ -20,6 +20,12 @@ class Trainer:
                 )
             else:
                 wandb.log = lambda *args, **kwargs: None
+
+        save_dir = getattr(self.config.trainer, "save_dir", None)
+        if save_dir is None or str(save_dir).strip() == "":
+            raise ValueError(
+                "trainer.save_dir must be a non-empty path. Configure trainer.experiment_name or set save_dir explicitly."
+            )
     
     def prepare_scheduler(self, worker):
 

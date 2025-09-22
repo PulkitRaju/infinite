@@ -2,9 +2,7 @@ import copy
 from train.datasets.base import BaseDataset, load_dataset
 
 class RLDataset(BaseDataset):
-    """
-    Reference: RL2/datasets/rl.py lines 4-27
-    """
+    """Dataset wrapper that replicates prompts for multiple responses."""
     def __init__(self, data_path, responses_per_prompt):
 
         self.dataset = load_dataset(data_path)

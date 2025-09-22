@@ -1,6 +1,6 @@
 #!/bin/bash
 # GRPO Training Launch Script
-# Reference: RL2/examples/orz_ppo.sh adapted for GRPO configuration
+# Training launch script adapted for GRPO configuration
 
 # Setup Hugging Face environment to handle rate limiting
 export HF_HOME="${HF_HOME:-$HOME/.cache/huggingface}"
@@ -12,6 +12,10 @@ if [ -f "environments/.env" ]; then
     echo "Loading environment variables from environments/.env"
     source environments/.env
 fi
+
+# Default Verifiers configuration (can be overridden before invoking this script)
+export VERIFIERS_ENV_ID="${VERIFIERS_ENV_ID:-math_python}"
+# Optional: VERIFIERS_ENV_ARGS can be a JSON object (e.g. '{"max_turns": 4}')
 
 # Check for HF token
 if [ -z "$HF_TOKEN" ] && [ -z "$HUGGING_FACE_HUB_TOKEN" ]; then
@@ -56,23 +60,25 @@ echo ""
 #     trainer.save_freq=32
 
 torchrun \
-    --nproc_per_node=1 \
+    --nproc_per_node=8 \
     -m train.trainer.grpo \
-    data.train_data_path=stub/data/math/train.jsonl \
-    data.test_data_path=stub/data/math/test.jsonl \
-    data.prompts_per_rollout=4 \
-    data.responses_per_prompt=2 \
+    'data.train_data_path="verifiers:train?limit=32"' \
+    'data.test_data_path="verifiers:eval?limit=32"' \
+    data.prompts_per_rollout=8 \
+    data.responses_per_prompt=4 \
     actor.model_name=Qwen/Qwen2-1.5B-Instruct \
     actor.max_length_per_device=512 \
     rollout.train_sampling_params.max_new_tokens=128 \
-    rollout.env_path=environments/eq.py \
+    rollout.env_path=environments/verifiers_adapter.py \
+    rollout.max_turns=3 \
     adv.estimator=reinforce \
     adv.norm_var=true \
     trainer.project=GRPO \
-    trainer.experiment_name=grpo-math-stub \
-    trainer.use_wandb=false \
-    trainer.test_freq=4 \
-    trainer.save_freq=8
+    trainer.experiment_name=grpo-math-verifiers-integration \
+    trainer.use_wandb=true \
+    trainer.n_epochs=1 \
+    trainer.test_freq=999999 \
+    trainer.save_freq=null
 
 # GRPO-specific configuration:
 # - adv.estimator=reinforce (Dr. GRPO default)
