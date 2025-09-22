@@ -20,15 +20,9 @@ from train.utils.logging import time_logger
 
 class GRPOTrainer(Trainer):
     """
-    GRPO (Group Relative Policy Optimization) Trainer
-    
-    This is a port of the PPO trainer from RL2/trainer/ppo.py (lines 18-136)
-    configured specifically for GRPO with:
-    - adv.norm_var=true 
-    - kl.reward_estimator=k3
-    - adv.estimator=reinforce (Dr. GRPO default)
-    
-    Reference: RL2/trainer/ppo.py lines 18-150
+    GRPO (Group Relative Policy Optimization) trainer tailored for
+    variance normalization, k3 KL estimation, and reinforce-style
+    advantage computation.
     """
 
     def __init__(self, config):
@@ -47,9 +41,7 @@ class GRPOTrainer(Trainer):
         self.rollout = Rollout(config.rollout)
 
     def get_dataloader(self, train: bool):
-        """
-        Reference: RL2/trainer/ppo.py lines 35-48
-        """
+        """Build the train or evaluation dataloader."""
         dataset = RLDataset(
             self.config.data.train_data_path
             if train else self.config.data.test_data_path,
@@ -65,9 +57,7 @@ class GRPOTrainer(Trainer):
     
     @time_logger("compute_approx_kl")
     def compute_approx_kl(self, tensor_dicts, step):
-        """
-        Reference: RL2/trainer/ppo.py lines 50-66
-        """
+        """Aggregate the approximate KL divergence for logging."""
         kl = 0
         total_actions = sum([
             td["action_mask"].sum().item() for td in tensor_dicts
@@ -85,9 +75,7 @@ class GRPOTrainer(Trainer):
     
     @time_logger("compute_advantages")
     def compute_advantages(self, tensor_dicts, step):
-        """
-        Reference: RL2/trainer/ppo.py lines 68-85
-        """
+        """Compute policy advantages using the configured estimator."""
         if self.config.adv.estimator == "gae":
             compute_gae(
                 tensor_dicts,
@@ -105,9 +93,7 @@ class GRPOTrainer(Trainer):
             raise NotImplementedError
             
     def train(self):
-        """
-        Reference: RL2/trainer/ppo.py lines 87-136
-        """
+        """Main training loop coordinating rollouts and updates."""
         step = load_ckpt(
             self,
             (self.actor, self.critic)
@@ -160,15 +146,29 @@ class GRPOTrainer(Trainer):
 
 @hydra.main(config_path="../../config", config_name="grpo", version_base=None)
 def main(config):
-    """
-    Reference: RL2/trainer/ppo.py lines 139-150
-    """
     initialize_global_process_group()
-    
-    trainer = GRPOTrainer(config)
-    trainer.train()
 
-    dist.destroy_process_group()
+    try:
+        trainer = GRPOTrainer(config)
+        trainer.train()
+    finally:
+        dist_initialized = dist.is_available() and dist.is_initialized()
+        should_finish_wandb = (
+            getattr(config.trainer, "use_wandb", False)
+            and getattr(wandb, "run", None) is not None
+        )
+        if should_finish_wandb:
+            should_call = True
+            if dist_initialized:
+                should_call = dist.get_rank() == 0
+            if should_call:
+                wandb.finish()
+                teardown_fn = getattr(wandb, "teardown", None)
+                if callable(teardown_fn):
+                    teardown_fn()
+
+        if dist_initialized:
+            dist.destroy_process_group()
 
 if __name__ == "__main__":
     main()

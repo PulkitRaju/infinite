@@ -5,9 +5,7 @@ import torch
 import torch.distributed as dist
 
 def pad_tensor_dict_to_multiple_of(tensor_dict, multiple_of):
-    """
-    Reference: RL2/utils/sequences.py lines 13-26
-    """
+    """Pad tensor dict entries so their length is divisible by `multiple_of`."""
     if len(tensor_dict["states"]) % multiple_of == 0:
         return tensor_dict
     pad_tokens = multiple_of - len(tensor_dict["states"]) % multiple_of
@@ -22,27 +20,20 @@ def pad_tensor_dict_to_multiple_of(tensor_dict, multiple_of):
     return tensor_dict
 
 def pack_tensor_dicts_to_minibatch(tensor_dicts):
-    """
-    Reference: RL2/utils/sequences.py lines 28-32
-    """
+    """Concatenate a list of tensor dicts into a single minibatch."""
     return {
         k: torch.cat([td[k] for td in tensor_dicts])
         for k in tensor_dicts[0].keys()
     }
 
 def position_ids_to_cu_seqlens(position_ids):
-    """
-    Simplified implementation for minimal GRPO
-    Reference: inferred from RL2/utils/sequences.py usage patterns
-    """
+    """Simplified cumulative sequence length helper for single sequences."""
     # This is a simplified version - in production you'd need the full implementation
     # For now, assume single sequence per minibatch
     return torch.tensor([0, len(position_ids)], device=position_ids.device)
 
 def data_manager(pack_minibatches=False, pair=False, gather=False):
-    """
-    Reference: RL2/utils/sequences.py lines 234-248
-    """
+    """Decorator factory handling scatter, pack, and gather semantics."""
     def decorator(func):
         @functools.wraps(func)
         def func_with_data_scatter_and_gather(
@@ -61,10 +52,7 @@ def data_manager(pack_minibatches=False, pair=False, gather=False):
 def scatter_and_pack_tensor_dicts(
     worker, tensor_dicts, pack_minibatches=False, pair=False
 ):
-    """
-    Minimal scatter and pack - simplified for GRPO
-    Reference: RL2/utils/sequences.py lines 116-181
-    """
+    """Scatter tensor dicts across ranks and optionally pack minibatches."""
     if pack_minibatches:
         if not dist.is_initialized() or dist.get_rank() == 0:
             bsz = math.ceil(
@@ -95,10 +83,7 @@ def scatter_and_pack_tensor_dicts(
     return minibatches
 
 def unpack_and_gather_tensor_dicts(worker, minibatches):
-    """
-    Minimal unpack and gather - simplified for GRPO
-    Reference: RL2/utils/sequences.py lines 225-232
-    """
+    """Move tensors back to CPU and return them as tensor dicts."""
     # For simplified version, just return the minibatches as tensor dicts
     tensor_dicts = []
     for minibatch in minibatches:
@@ -109,9 +94,7 @@ def unpack_and_gather_tensor_dicts(worker, minibatches):
     return tensor_dicts
 
 def count_total(minibatches, key, device_mesh=None):
-    """
-    Reference: RL2/utils/sequences.py lines 250-269
-    """
+    """Sum tensor entries across minibatches, optionally all-reducing."""
     if isinstance(key, tuple):
         return tuple(
             count_total(minibatches, k, device_mesh)

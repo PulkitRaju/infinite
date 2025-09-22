@@ -1,5 +1,4 @@
-# GRPO Configuration - Ported from RL2/trainer/config/ppo.yaml
-# Reference: RL2/trainer/config/ppo.yaml lines 1-104
+# GRPO Configuration for reinforcement learning
 # Configured for GRPO with adv.norm_var=true, kl.reward_estimator=k3, adv.estimator=reinforce
 
 data:

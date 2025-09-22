@@ -8,9 +8,7 @@ from train.utils.parallelism import prepare_tp_model, prepare_dp_model
 from train.utils.offloading import load_model_to_device, load_optimizer_to_device
 
 class Worker:
-    """
-    Reference: RL2/workers/base.py lines 8-81
-    """
+    """Base worker handling model preparation and optimization steps."""
     def __init__(self, config, train: bool):
 
         self.config = config
@@ -55,9 +53,7 @@ class Worker:
         raise RuntimeError(f"Failed to load {model_name} after {max_retries} attempts")
 
     def prepare_device_mesh(self):
-        """
-        Reference: RL2/workers/base.py lines 20-39
-        """
+        """Set up device meshes for data, tensor, and sequence parallelism."""
         world_size = dist.get_world_size()
         assert world_size % (self.config.ddp_size * self.config.tp_size) == 0, \
             f"World_size {world_size} must be divisible by ddp_size {self.config.ddp_size} * tp_size {self.config.tp_size}."
@@ -78,9 +74,7 @@ class Worker:
         )
 
     def prepare_model_optimizer(self):
-        """
-        Reference: RL2/workers/base.py lines 41-60
-        """
+        """Configure model sharding, optimizer, and offloading helpers."""
         if self.train and self.config.gradient_checkpointing:
             self.model.gradient_checkpointing_enable()
 
@@ -101,16 +95,11 @@ class Worker:
         load_model_to_device(self, "cpu")
             
     def backward(self, loss):
-        """
-        Reference: RL2/workers/base.py lines 62-64
-        """
-        # https://github.com/ChenmienTan/RL2/issues/11
+        """Scale loss and run the backward pass across parallel dimensions."""
         (self.dp_size * self.config.sp_size * loss).backward()
-    
+
     def optimizer_step(self):
-        """
-        Reference: RL2/workers/base.py lines 66-81
-        """
+        """Perform an optimizer step with gradient clipping and offloading."""
         grad_norm = clip_grad_norm_(
             self.model.parameters(),
             max_norm=self.config.max_grad_norm

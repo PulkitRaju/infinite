@@ -5,9 +5,7 @@ import torch
 import torch.distributed as dist
 
 def initialize_global_process_group(timeout_second=36000):
-    """
-    Reference: RL2/utils/comm.py lines 7-13
-    """
+    """Initialize NCCL process groups and set the CUDA device."""
     dist.init_process_group("nccl", timeout=timedelta(seconds=timeout_second))
 
     local_rank = int(os.environ["LOCAL_RANK"])
@@ -15,9 +13,7 @@ def initialize_global_process_group(timeout_second=36000):
         torch.cuda.set_device(local_rank)
 
 def split_and_scatter_list(lst, device_mesh):
-    """
-    Reference: RL2/utils/comm.py lines 15-31
-    """
+    """Split a list on rank zero and scatter slices across the mesh."""
     if device_mesh.get_local_rank() == 0:
         length_per_dp = math.ceil(len(lst) / device_mesh.size())
     lists = [
@@ -35,9 +31,7 @@ def split_and_scatter_list(lst, device_mesh):
     return lst[0]
 
 def boardcast_list(lst, device_mesh):
-    """
-    Reference: RL2/utils/comm.py lines 33-48
-    """
+    """Broadcast a Python list to every rank in the mesh."""
     kwargs = {
         "group": device_mesh.get_group(),
         "group_src": 0
@@ -54,9 +48,7 @@ def boardcast_list(lst, device_mesh):
     return lst
 
 def gather_and_concat_list(lst, device_mesh):
-    """
-    Reference: RL2/utils/comm.py lines 50-63
-    """
+    """Gather lists from all ranks and concatenate them on rank zero."""
     lists = (
         device_mesh.size() * [None]
         if device_mesh.get_local_rank() == 0

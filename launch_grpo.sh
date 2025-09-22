@@ -1,6 +1,6 @@
 #!/bin/bash
 # GRPO Training Launch Script
-# Reference: RL2/examples/orz_ppo.sh adapted for GRPO configuration
+# Training launch script adapted for GRPO configuration
 
 # Setup Hugging Face environment to handle rate limiting
 export HF_HOME="${HF_HOME:-$HOME/.cache/huggingface}"

@@ -1,1 +1,1 @@
-# Utility modules for GRPO training - Ported from RL2
+# Utility modules for GRPO training

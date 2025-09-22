@@ -3,9 +3,7 @@ import torch
 from torch.distributed.fsdp._runtime_utils import _lazy_init
 
 def load_model_to_device(worker, device):
-    """
-    Reference: RL2/utils/offloading.py lines 5-16
-    """
+    """Move FSDP-managed model parameters between CPU and GPU."""
     if not getattr(worker.config, "offload_model", False):
         return
 
@@ -18,9 +16,7 @@ def load_model_to_device(worker, device):
         flat_param._local_shard = flat_param.data
 
 def load_optimizer_to_device(worker, device):
-    """
-    Reference: RL2/utils/offloading.py lines 18-30
-    """
+    """Move optimizer state tensors between CPU and GPU."""
     if not getattr(worker.config, "offload_optimizer", False):
         return
 
@@ -34,9 +30,7 @@ def load_optimizer_to_device(worker, device):
                     )
 
 def model_offloading_manager(func):
-    """
-    Reference: RL2/utils/offloading.py lines 32-41
-    """
+    """Decorator to load model params before execution and offload after."""
     @functools.wraps(func)
     def func_with_model_offloading(worker, *args, **kwargs):
         load_model_to_device(worker, torch.cuda.current_device())

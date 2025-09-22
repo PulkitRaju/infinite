@@ -8,9 +8,7 @@ from torchdata.stateful_dataloader import StatefulDataLoader
 
 # TODO (P1): support concatnating multiple datasets
 def load_dataset(data_path):
-    """
-    Reference: RL2/datasets/base.py lines 8-21
-    """
+    """Load a dataset from local files, Hugging Face, or the verifiers adapter."""
     if data_path.startswith("verifiers:"):
         spec = data_path[len("verifiers:") :]
         if "?" in spec:
@@ -47,9 +45,7 @@ def load_dataset(data_path):
         return datasets.load_dataset(data_path, split=split)
 
 def get_dataloader(dataset, batch_size):
-    """
-    Reference: RL2/datasets/base.py lines 23-30
-    """
+    """Create a stateful dataloader with shuffling and custom collate."""
     return StatefulDataLoader(
         dataset,
         batch_size,
@@ -65,9 +61,7 @@ def tokenize_messages(
     max_length=None,
     shift=True
 ):
-    """
-    Reference: RL2/datasets/base.py lines 32-79
-    """
+    """Tokenize a conversation into state/action tensors for RL training."""
     states, actions, action_mask = [], [], []
     for idx, message in enumerate(messages):
 
@@ -110,9 +104,7 @@ def tokenize_messages(
     }
 
 class BaseDataset(Dataset):
-    """
-    Reference: RL2/datasets/base.py lines 81-94
-    """
+    """Dataset wrapper that performs lazy tokenization and caching."""
     def __init__(
         self,
         config,

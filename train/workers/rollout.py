@@ -1,6 +1,3 @@
-# Ported from /Users/abhishekmishra/Documents/infinite/RL2/RL2/workers/rollout.py
-# Original implementation from RL2 repository
-
 from omegaconf import OmegaConf
 import os
 import json

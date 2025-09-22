@@ -11,9 +11,7 @@ from transformers import AutoModelForSequenceClassification
 from train.utils.offloading import model_offloading_manager
 
 def get_state_dict(model, full_state_dict: bool):
-    """
-    Reference: RL2/utils/checkpointing.py lines 13-19
-    """
+    """Fetch a sharded or full state dict with CPU offload enabled."""
     options = StateDictOptions(
         full_state_dict=full_state_dict,
         cpu_offload=True
@@ -22,9 +20,7 @@ def get_state_dict(model, full_state_dict: bool):
 
 @model_offloading_manager
 def get_worker_ckpt(worker):
-    """
-    Reference: RL2/utils/checkpointing.py lines 21-29
-    """
+    """Capture model, optimizer, and scheduler state for a worker."""
     return {
         "model": get_state_dict(
             worker.model, full_state_dict=False
@@ -34,9 +30,7 @@ def get_worker_ckpt(worker):
     }
 
 def get_ckpt(trainer, workers, step):
-    """
-    Reference: RL2/utils/checkpointing.py lines 31-41
-    """
+    """Assemble a multi-worker checkpoint payload."""
     ckpt = {
         "step": step,
         "dataloader": trainer.train_dataloader.state_dict()
@@ -49,9 +43,7 @@ def get_ckpt(trainer, workers, step):
 
 @model_offloading_manager
 def load_worker_ckpt(worker, ckpt):
-    """
-    Reference: RL2/utils/checkpointing.py lines 43-50
-    """
+    """Restore worker state dicts and optimizer metadata."""
     set_model_state_dict(
         worker.model, ckpt["model"]
     )
@@ -59,9 +51,7 @@ def load_worker_ckpt(worker, ckpt):
     worker.scheduler.load_state_dict(ckpt["scheduler"])
 
 def load_ckpt(trainer, workers):
-    """
-    Reference: RL2/utils/checkpointing.py lines 52-70
-    """
+    """Load checkpoints from disk into the trainer and workers."""
     if trainer.config.trainer.load_ckpt_from is None:
         return 0
 
@@ -84,9 +74,7 @@ def load_ckpt(trainer, workers):
     return ckpt["step"]
 
 def save_ckpt(trainer, workers, step):
-    """
-    Reference: RL2/utils/checkpointing.py lines 72-80
-    """
+    """Persist checkpoint shards at configured save intervals."""
     if trainer.config.trainer.save_freq is None or step % trainer.config.trainer.save_freq != 0:
         return
 
@@ -100,9 +88,7 @@ def save_ckpt(trainer, workers, step):
     )
 
 def save_model(trainer, worker, rm=False):
-    """
-    Reference: RL2/utils/checkpointing.py lines 82-106
-    """
+    """Save the final model and tokenizer to the trainer save directory."""
     save_dir = trainer.config.trainer.save_dir
     if save_dir is None or str(save_dir).strip() == "":
         raise ValueError("trainer.save_dir must be a non-empty path when saving the final model.")

@@ -1,6 +1,3 @@
-# Ported from /Users/abhishekmishra/Documents/infinite/RL2/RL2/workers/critic.py
-# Original implementation from RL2 repository
-
 from collections import defaultdict
 import torch
 from transformers import AutoModelForTokenClassification
